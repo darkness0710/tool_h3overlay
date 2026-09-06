@@ -31,7 +31,6 @@ typedef struct
 {
     DWORD pid;
     HANDLE handle;
-    uint32_t dllBaseAddress;
     uint32_t hdDLLBaseAddress;
     uint32_t exeBaseAddress;
     uint32_t playerSectionAddress;

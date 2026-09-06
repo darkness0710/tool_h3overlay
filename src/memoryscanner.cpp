@@ -17,6 +17,7 @@
 MemoryScanner::MemoryScanner(Settings *settings, QObject *parent):
     QObject(parent),
     winLossCounted(false),
+    layoutSuspect(false),
     mapNameTried(false),
     mapNameGeneratedTried(false),
     profileTried(false),
@@ -176,6 +177,77 @@ void MemoryScanner::updateTavernInfo()
     return;
 }
 
+void MemoryScanner::setLayoutSuspect(const bool suspect, const QString &what)
+{
+    // Edge triggered: updateState runs ten times a second, so only react when
+    // the state actually flips.
+    if(suspect == this->layoutSuspect)
+    {
+        return;
+    }
+    this->layoutSuspect = suspect;
+    if(suspect)
+    {
+        qWarning() << "Game memory does not look like" << what
+                   << "- the offsets in this build are probably outdated.";
+    }
+    else
+    {
+        qInfo() << "Game memory layout looks valid again.";
+    }
+    emit memoryLayoutSuspect(suspect, what);
+}
+
+/** The game structs are read raw from process memory, so every field lands at
+ *  a hard coded offset (see gamestructs.h). If HotA ever moves those fields,
+ *  the reads still succeed but return whatever now sits at that offset. These
+ *  checks catch that case: the values below are constrained by the game rules,
+ *  so an implausible value means we are no longer looking at a player struct.
+ *  Without this, garbage names and flag colors would silently go on stream. */
+constexpr uint8_t MAX_PLAYER_COLOR = 7;
+constexpr uint8_t MAX_HEROES_PER_PLAYER = 8;
+constexpr uint8_t MAX_TOWNS_PER_PLAYER = 48;
+
+static bool isPlausiblePlayer(const PlayerBaseStruct &player)
+{
+    if(player.color > MAX_PLAYER_COLOR)
+    {
+        return false;
+    }
+    // These are booleans in the game, so anything but 0/1 means the field
+    // is not where we think it is.
+    if(player.isHuman > 1 || player.isLocal > 1 || player.isRemote > 1)
+    {
+        return false;
+    }
+    if(player.nrOfHeroes > MAX_HEROES_PER_PLAYER ||
+            player.nrOfTowns > MAX_TOWNS_PER_PLAYER)
+    {
+        return false;
+    }
+    // An empty slot is all zeroes, which is fine. A used slot must hold a
+    // printable, null terminated name.
+    if(player.playerName[0] == '\0')
+    {
+        return true;
+    }
+    bool terminated = false;
+    for(const char character: player.playerName)
+    {
+        if(character == '\0')
+        {
+            terminated = true;
+            break;
+        }
+        if(static_cast<unsigned char>(character) < 0x20 ||
+                static_cast<unsigned char>(character) > 0x7E)
+        {
+            return false;
+        }
+    }
+    return terminated;
+}
+
 bool MemoryScanner::updatePlayersInfo()
 {
     if (!this->proc.processInfo.handle)
@@ -192,6 +264,18 @@ bool MemoryScanner::updatePlayersInfo()
         qWarning() << "Could not read Player id";
         return false;
     }
+
+    // The read succeeded, but that only means the address was readable. Check
+    // that what came back actually looks like player structs before using it.
+    for(const PlayerBaseStruct &player: players)
+    {
+        if(isPlausiblePlayer(player) == false)
+        {
+            setLayoutSuspect(true, tr("player data"));
+            return false;
+        }
+    }
+    setLayoutSuspect(false, QString());
 
     // Player number != player color. E.g in a two player map, the player number
     // will be 0 and 1, but the colors might med 0 (red) and 2 (tan)

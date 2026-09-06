@@ -1,4 +1,6 @@
 #include "mainwindow.h"
+
+#include <QStatusBar>
 #include "ui_mainwindow.h"
 
 #include <iostream>
@@ -160,12 +162,29 @@ void MainWindow::populateComboboxes()
     }
 }
 
+void MainWindow::showLayoutWarning(const bool suspect, const QString what)
+{
+    if(suspect)
+    {
+        // No timeout: this does not fix itself, the build has to be updated.
+        statusBar()->showMessage(tr("Game memory does not look like %1. "
+                                    "Heroes 3 was probably updated and this "
+                                    "version of the overlay needs new offsets.")
+                                 .arg(what));
+    }
+    else
+    {
+        statusBar()->clearMessage();
+    }
+}
+
 void MainWindow::connectSignals()
 {
     connect(this->scanner, &MemoryScanner::playerUpdated, this, &MainWindow::getUpdate);
     connect(this->storedSettings, &Settings::settingsUpdated, this, &MainWindow::sendUpdate);
     connect(this->hotaMeta, &HotaMetaClient::dataUpdated, this, &MainWindow::sendUpdate);
     connect(this->about, &AboutWindow::activateDebugMessages, this, &MainWindow::updateDebugStatus);
+    connect(this->scanner, &MemoryScanner::memoryLayoutSuspect, this, &MainWindow::showLayoutWarning);
 
     connect(this->ui->todayLineBox, &QCheckBox::toggled, this, [this](bool checked)
     {

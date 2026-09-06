@@ -64,6 +64,17 @@ private:
     void clearBuffers();
 
     /**
+     * @brief setLayoutSuspect Records whether the data read from the game
+     * still matches the structs in gamestructs.h, and emits
+     * memoryLayoutSuspect() when that changes. Reading a wrong address
+     * usually still succeeds, so this is what separates "the game moved and
+     * this build is outdated" from "everything is fine".
+     * @param suspect true if the data read did not look valid.
+     * @param what The name of the data which did not look valid.
+     */
+    void setLayoutSuspect(const bool suspect, const QString &what);
+
+    /**
      * @brief checkIfInMatch There is a pointer which is only not null when a
      * match is active. As soon as the player goes back to the lobby, that
      * pointer is set to null. This function uses that pointer to tell if we
@@ -307,6 +318,7 @@ private:
     std::array <QString, 2> tradeResult;
 
     bool winLossCounted;
+    bool layoutSuspect;
     bool mapNameTried;
     bool mapNameGeneratedTried;
     bool profileTried;
@@ -325,6 +337,14 @@ signals:
      * be displayed
      */
     void playerUpdated(displayInfoStruct displayInfo);
+
+    /**
+     * @brief memoryLayoutSuspect Emitted when the data read from the game
+     * stops (or starts again) matching the structs this build expects.
+     * @param suspect true if the game memory no longer looks like we expect.
+     * @param what The name of the data which did not look valid.
+     */
+    void memoryLayoutSuspect(bool suspect, QString what);
 };
 
 #endif // MEMORYSCANNER_H

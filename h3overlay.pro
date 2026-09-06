@@ -10,7 +10,7 @@ QMAKE_CXXFLAGS += -pedantic -Wall -Wextra -Wcast-qual -Wcast-align -Wstrict-null
 
 RC_ICONS = resources/images/main/icon.ico
 
-VERSION = 1.1.4.0
+VERSION = 1.1.5.0
 QMAKE_TARGET_DESCRIPTION = Heroes 3 HotA Overlay
 
 SOURCES += \

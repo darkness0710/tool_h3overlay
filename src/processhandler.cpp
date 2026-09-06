@@ -269,7 +269,6 @@ bool ProcessHandler::updateGameAddresses()
         return false;
     }
     this->processInfo.hdDLLBaseAddress = getModuleBaseAddress(L"HD_HOTA.dll");
-    this->processInfo.dllBaseAddress = getModuleBaseAddress(L"hota.dll");
 
     // Gets a pointer which points to an unmapped struct, but it contains
     // values which are useful

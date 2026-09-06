@@ -111,6 +111,15 @@ private slots:
     void updateDebugStatus(const bool activated);
 
     /**
+     * @brief showLayoutWarning Shows a warning in the status bar when the data
+     * read from the game no longer matches the structs this build expects,
+     * which means the game was updated and this build needs new offsets.
+     * @param suspect true if the game memory no longer looks like we expect.
+     * @param what The name of the data which did not look valid.
+     */
+    void showLayoutWarning(const bool suspect, const QString what);
+
+    /**
      * @brief exitApplication Exits the application.
      */
     void exitApplication();

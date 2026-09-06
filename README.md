@@ -25,6 +25,14 @@ This application will attach to the Heroes 3 HotA game and
 read the game memory directly. This means that this 
 application is vulnerable to break with game updates.
 
+When Heroes 3 is updated, the data this application reads can move to a
+different place in memory. Reading the old place usually still succeeds, it
+just returns something else, so a break can show up as wrong names and flag
+colors rather than as an obvious failure. The overlay now checks that what it
+reads still looks like real player data, and shows a warning in the status bar
+of the controller window when it does not. If you see that warning, this build
+needs new offsets, so do not trust what the overlay is showing.
+
 
 ## FEATURES
 All data can be automatically fetched if no override is given.
