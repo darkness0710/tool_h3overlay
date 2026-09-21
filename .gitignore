@@ -78,3 +78,6 @@ build/
 
 # Build logs
 *.log
+
+# Probe dumps
+*.bin

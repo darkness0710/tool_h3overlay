@@ -173,11 +173,13 @@ def main():
         return 2
     print("Module base: 0x%X" % base)
 
+    guild_open = False
     tavern = read(handle, base + EXE_TO_ACTIVE_TAVERN, 4)
     if tavern is not None:
         value = int.from_bytes(tavern, "little")
+        guild_open = value != 0
         print("Active tavern pointer: 0x%X (%s)"
-              % (value, "guild is open" if value else "guild is closed"))
+              % (value, "guild is open" if guild_open else "guild is closed"))
 
     heroes = read(handle, base + EXE_TO_BEST_HERO, MAX_PLAYERS * 4)
     if heroes is None:
@@ -233,6 +235,13 @@ def main():
         with open(args.save, "wb") as out:
             out.write(region)
         print("\nSaved the region to %s" % args.save)
+        if args.diff and not guild_open:
+            print("\nWARNING: this snapshot was taken with the guild closed, "
+                  "so it cannot show what the guild displays. Hovering the "
+                  "Tavern building in the town screen is not enough: open the "
+                  "Tavern and go into the Thieves' Guild, so the table with "
+                  "the Best Hero row is on screen, then take this snapshot "
+                  "again. The line above must read \"guild is open\".")
 
     kernel32.CloseHandle(handle)
     return 0
