@@ -50,6 +50,20 @@ All data can be automatically fetched if no override is given.
 * **Start hero/town** - The behavior can be changed in the settings to allow
   the overlay to detect when the player opens the Thieves' Guild and
   use the "best hero" instead of starter hero if available.
+* **Opponent's best hero** - The head to head line can show the opponent's
+  best hero attack, defence, power and knowledge, under that player's own
+  portrait, and keeps them up to date as the hero grows. Requires the
+  "today's record" line to be switched on in the settings.
+
+  Open the Thieves' Guild once in the match to start it: the game only
+  reports who the best hero is while that table is being drawn. After that
+  the numbers stay and follow the hero on their own, and are dropped again
+  while the hero is inside a town, where the guild would not report them
+  either.
+
+  The guild reveals a best hero's portrait at a lower number of Thieves'
+  Guilds than it reveals the numbers, and the overlay waits for the numbers:
+  if the guild is not showing them, neither is the overlay.
 * **Trade** - This requires the overlay to be running
   while the trade happens in the lobby chat. Else it will miss that event
 

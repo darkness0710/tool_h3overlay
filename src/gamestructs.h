@@ -32,6 +32,9 @@ typedef struct
     DWORD pid;
     HANDLE handle;
     uint32_t hdDLLBaseAddress;
+    /** hota.dll. The hero array lives behind a pointer in here, and every
+     *  HotA release moves that pointer, so HeroPointerLocator finds it. */
+    uint32_t dllBaseAddress;
     uint32_t exeBaseAddress;
     uint32_t playerSectionAddress;
     uint32_t statusStruktAddress;
@@ -40,6 +43,30 @@ typedef struct
     bool isFinishedLoading;
     bool activeMap;
 } ProcessInfoStruct;
+
+/** A hero as the game stores it, cut down to the parts this application uses.
+ *  The full struct is 1170 bytes and the heroes sit in one array, so the size
+ *  has to be exact for indexing by hero id to land in the right place.
+ *  Offsets are from the game, the padding only exists to reach them.
+ *  NOTE: This is packed to match the game memory */
+typedef struct
+{
+    uint8_t padding1[34];                            // 0
+    uint8_t color;                                   // 34
+    char heroName[13];                               // 35
+    uint8_t padding2[3];                             // 48
+    uint8_t heroID;                                  // 51
+    uint8_t padding3[1090];                          // 52
+    uint8_t attackSkill;                             // 1142
+    uint8_t defenceSkill;                            // 1143
+    uint8_t powerSkill;                              // 1144
+    uint8_t knowledgeSkill;                          // 1145
+    uint8_t padding4[24];                            // 1146
+}__attribute__((packed, aligned(1))) GuildHeroStruct ;
+
+static_assert(sizeof(GuildHeroStruct) == 1170,
+              "GuildHeroStruct must match the stride of the game hero array");
+
 
 /** This is the struct which contains player match info.
  *  NOTE: This is packed to match the game memory */
@@ -85,6 +112,13 @@ struct PlayerStruct
     int32_t rating;
     int32_t ratingDelta;
     uint32_t tavernHero;
+    /** Primary skills of tavernHero, read live while the Thieves' Guild is
+     *  revealing them. Only meaningful when tavernHeroStatsKnown is true. */
+    uint8_t tavernHeroAttack;
+    uint8_t tavernHeroDefence;
+    uint8_t tavernHeroPower;
+    uint8_t tavernHeroKnowledge;
+    bool tavernHeroStatsKnown;
     uint32_t playerNumber;
     std::array <char, 20> winningColor;
     bool newMatchToRegister;
@@ -162,6 +196,14 @@ struct displayPlayerInfoStruct
     QString town;
     QString wins;
     bool isLocalPlayer = false;
+
+    /** The best hero's primary skills, already formatted. Empty whenever the
+     *  Thieves' Guild is not showing them, and the row stays hidden then:
+     *  the overlay shows what the guild shows and nothing more. */
+    QString heroAttack;
+    QString heroDefence;
+    QString heroPower;
+    QString heroKnowledge;
 
     /** Head to head record against the other player, and today's record for
      *  the local player. These come from the hotameta.com API rather than from

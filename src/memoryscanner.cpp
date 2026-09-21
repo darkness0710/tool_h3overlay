@@ -8,6 +8,7 @@
 
 #include <QObject>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
 
@@ -23,6 +24,8 @@ MemoryScanner::MemoryScanner(Settings *settings, QObject *parent):
     QObject(parent),
     winLossCounted(false),
     layoutSuspect(false),
+    tavernWasOpen(false),
+    guildShowsStats(false),
     mapNameTried(false),
     mapNameGeneratedTried(false),
     profileTried(false),
@@ -55,6 +58,7 @@ void MemoryScanner::clearBuffers()
     memset(&this->matchInfo, 0, sizeof(MatchInfoStruct));
     this->localPlayer.tavernHero = NO_TAVERN_HERO;
     this->opponentPlayer.tavernHero = NO_TAVERN_HERO;
+    resetGuildStatGate();
     this->proc.reset();
 
     emit playerUpdated(this->displayInfo);
@@ -166,6 +170,147 @@ constexpr uint32_t HD_EXE_TO_ACTIVE_TAVERN_OFFSET = 0x2AA694;
 constexpr uint32_t HD_EXE_TO_TAVERN_BEST_HERO = 0x2AAA20;
 
 
+/** Where the hero array pointer sits inside hota.dll. Only a fallback: every
+ *  HotA release rebuilds that module and moves this, so HeroPointerLocator
+ *  detects it from the running game. Correct for the build with PE timestamp
+ *  0x6A99ADE7. */
+constexpr uint32_t HOTA_DLL_TO_HERO_SECTION_POINTER_FALLBACK = 0x6463D4;
+
+/** Part of the label the guild draws under a best hero portrait. Short, but
+ *  it does not appear in any module of the game, so a hit is always a copy
+ *  something made at runtime. */
+constexpr char GUILD_STAT_LABEL[] = "Know.";
+constexpr size_t GUILD_STAT_LABEL_LENGTH = sizeof(GUILD_STAT_LABEL) - 1;
+
+/** The game keeps one copy of the label in its own loaded text, whether or not
+ *  anything is drawn. Anything beyond that was built to be displayed. */
+constexpr int GUILD_LABEL_BASELINE = 1;
+
+/** Upper bound on a region this scan will copy out. Well above anything the
+ *  dialog allocates, low enough that a pathological region cannot make the
+ *  overlay allocate its way into trouble. */
+constexpr SIZE_T MAX_GATE_REGION_SIZE = 64u * 1024u * 1024u;
+
+/** Offsets in GuildHeroStruct are only meaningful if the array base is right.
+ *  A hero with an implausible primary skill means it is not, so say nothing
+ *  rather than put a wrong number on stream. */
+constexpr uint8_t MAX_PRIMARY_SKILL = 99;
+
+static int countOccurrences(const uint8_t * const haystack,
+                            const size_t haystackSize,
+                            const char * const needle,
+                            const size_t needleSize)
+{
+    if(haystackSize < needleSize)
+    {
+        return 0;
+    }
+    int found = 0;
+    for(size_t index = 0; index <= haystackSize - needleSize; ++index)
+    {
+        if(memcmp(&haystack[index], needle, needleSize) == 0)
+        {
+            ++found;
+        }
+    }
+    return found;
+}
+
+bool MemoryScanner::guildIsShowingHeroStats()
+{
+    QElapsedTimer timer;
+    timer.start();
+    int copies = 0;
+    bool answer = false;
+    const QList<MEMORY_BASIC_INFORMATION> regions = enumAllVirtualMemory();
+    for(const MEMORY_BASIC_INFORMATION &region: regions)
+    {
+        // Modules carry the label in their string tables at all times, so they
+        // can never tell us anything. Only what the game allocated can.
+        if(region.Type != MEM_PRIVATE)
+        {
+            continue;
+        }
+        // The whole region is copied out to be searched, so refuse the ones
+        // big enough to be a problem. A dialog's text widgets are small; the
+        // huge allocations are image and sound buffers.
+        if(region.RegionSize > MAX_GATE_REGION_SIZE)
+        {
+            continue;
+        }
+        std::unique_ptr<uint8_t[]> buffer;
+        const size_t bufferSize = readMemoryRegion(region.BaseAddress, buffer);
+        if(bufferSize == 0)
+        {
+            continue;
+        }
+        copies += countOccurrences(buffer.get(),
+                                   bufferSize,
+                                   GUILD_STAT_LABEL,
+                                   GUILD_STAT_LABEL_LENGTH);
+        if(copies > GUILD_LABEL_BASELINE)
+        {
+            // One past the baseline already answers the question, and stopping
+            // here keeps this off the rest of the address space.
+            answer = true;
+            break;
+        }
+    }
+    qDebug() << "Guild stat gate check took" << timer.elapsed() << "ms, answer" << answer;
+    return answer;
+}
+
+void MemoryScanner::resetGuildStatGate()
+{
+    this->localPlayer.tavernHeroStatsKnown = false;
+    this->opponentPlayer.tavernHeroStatsKnown = false;
+    this->guildShowsStats = false;
+    this->tavernWasOpen = false;
+}
+
+bool MemoryScanner::readTavernHeroStats(PlayerStruct &player)
+{
+    if(player.tavernHero == NO_TAVERN_HERO ||
+            this->proc.processInfo.dllBaseAddress == 0)
+    {
+        return false;
+    }
+
+    // Which offset reaches the hero array moves with every hota.dll build, so
+    // it is detected from the running game rather than compiled in.
+    const uint32_t pointerOffset =
+            this->heroPointerLocator.resolve(this->proc.processInfo.handle,
+                                             this->proc.processInfo.dllBaseAddress,
+                                             HOTA_DLL_TO_HERO_SECTION_POINTER_FALLBACK);
+    const uint32_t heroSection =
+            this->proc.followPointer(this->proc.processInfo.dllBaseAddress + pointerOffset);
+    if(heroSection == 0)
+    {
+        return false;
+    }
+
+    GuildHeroStruct hero;
+    const uint32_t heroAddress = heroSection + sizeof(GuildHeroStruct) * player.tavernHero;
+    if(readMemory(POINTER_CASTING(heroAddress), &hero, sizeof(hero)) == false)
+    {
+        return false;
+    }
+
+    if(hero.attackSkill > MAX_PRIMARY_SKILL ||
+            hero.defenceSkill > MAX_PRIMARY_SKILL ||
+            hero.powerSkill > MAX_PRIMARY_SKILL ||
+            hero.knowledgeSkill > MAX_PRIMARY_SKILL)
+    {
+        return false;
+    }
+
+    player.tavernHeroAttack = hero.attackSkill;
+    player.tavernHeroDefence = hero.defenceSkill;
+    player.tavernHeroPower = hero.powerSkill;
+    player.tavernHeroKnowledge = hero.knowledgeSkill;
+    return true;
+}
+
 bool MemoryScanner::populateTavernHero(PlayerStruct &player)
 {
     if(player.info.heroIDSlot[0] == 0xFFFFFFFF)
@@ -188,9 +333,13 @@ bool MemoryScanner::populateTavernHero(PlayerStruct &player)
     // value would put a hero the Thieves' Guild never revealed on stream, so
     // only accept an id the player actually owns: the best hero is by
     // definition one of their own heroes.
+    //
+    // Whatever was already known is left alone rather than thrown away, since
+    // the table being drawn while that hero happens to be inside a town would
+    // otherwise lose them for good: the array is only written on a draw, so
+    // there would be nothing to recover the id from when they walk back out.
     if(playerOwnsHero(player, bestHero) == false)
     {
-        player.tavernHero = NO_TAVERN_HERO;
         return false;
     }
 
@@ -208,12 +357,40 @@ void MemoryScanner::updateTavernInfo()
         return;
     }
 
-    if(pointer == 0)
+    const bool tavernIsOpen = pointer != 0;
+    if(tavernIsOpen && this->tavernWasOpen == false)
     {
-        return;
+        // Only on the opening edge. The check walks the game's private memory,
+        // which is far too expensive to repeat ten times a second, and the
+        // answer cannot change while the table sits there.
+        this->guildShowsStats = guildIsShowingHeroStats();
+        qInfo() << "Thieves' Guild opened, showing hero stats:" << this->guildShowsStats;
     }
-    populateTavernHero(this->localPlayer);
-    populateTavernHero(this->opponentPlayer);
+    this->tavernWasOpen = tavernIsOpen;
+
+    // Which hero is the best one is only reported while the table is drawn.
+    if(tavernIsOpen)
+    {
+        populateTavernHero(this->localPlayer);
+        populateTavernHero(this->opponentPlayer);
+    }
+
+    // Who the best hero is stays remembered from that draw. Whether they are
+    // currently in the field is a different question, and one the player's own
+    // hero list answers on every pass: a hero who steps into a town leaves it,
+    // and reappears in it on the way out. So the id is kept and only the
+    // showing of it follows the hero, which means walking back out restores
+    // the row without having to open the table again.
+
+    // The numbers, in contrast, are read on every update, including after the
+    // table is closed, so they stay current instead of freezing at whatever
+    // they were when it was last open. The gate is what keeps that honest: it
+    // only opens while the guild is revealing them, and the player can reopen
+    // the table any time to see the same values.
+    this->opponentPlayer.tavernHeroStatsKnown =
+            this->guildShowsStats &&
+            playerOwnsHero(this->opponentPlayer, this->opponentPlayer.tavernHero) &&
+            readTavernHeroStats(this->opponentPlayer);
 
     return;
 }
@@ -417,8 +594,11 @@ void MemoryScanner::setDisplayInfo(PlayerStruct &player, size_t playerNumber)
 
     uint32_t hero = matchInfo.startHero[player.info.color];
 
+    // Only while that hero is actually in the field. They drop out of the
+    // player's hero list on stepping into a town and come back on the way out,
+    // so this follows them without needing the guild to be consulted again.
     if(this->settings->getDisplayTavernHeroes() &&
-            (player.tavernHero != NO_TAVERN_HERO))
+            playerOwnsHero(player, player.tavernHero))
     {
         hero = player.tavernHero;
     }
@@ -431,6 +611,24 @@ void MemoryScanner::setDisplayInfo(PlayerStruct &player, size_t playerNumber)
     {
         this->displayInfo.player[playerNumber].town = townMap[matchInfo.startTown[player.info.color]];
     }
+    // Left empty unless the Thieves' Guild is revealing them, and the display
+    // drops the segment while they are empty, so the overlay shows the numbers
+    // exactly when the game does.
+    if(player.tavernHeroStatsKnown)
+    {
+        this->displayInfo.player[playerNumber].heroAttack = QString::number(player.tavernHeroAttack);
+        this->displayInfo.player[playerNumber].heroDefence = QString::number(player.tavernHeroDefence);
+        this->displayInfo.player[playerNumber].heroPower = QString::number(player.tavernHeroPower);
+        this->displayInfo.player[playerNumber].heroKnowledge = QString::number(player.tavernHeroKnowledge);
+    }
+    else
+    {
+        this->displayInfo.player[playerNumber].heroAttack.clear();
+        this->displayInfo.player[playerNumber].heroDefence.clear();
+        this->displayInfo.player[playerNumber].heroPower.clear();
+        this->displayInfo.player[playerNumber].heroKnowledge.clear();
+    }
+
     this->displayInfo.player[playerNumber].rating = QString::number(player.rating);
     this->displayInfo.player[playerNumber].wins = QString::number(player.wins);
     this->displayInfo.player[playerNumber].nameColor = QString(&player.nameColor[0]);
@@ -663,6 +861,7 @@ bool MemoryScanner::updateMatchInfo()
     {
         this->localPlayer.tavernHero = NO_TAVERN_HERO;
         this->opponentPlayer.tavernHero = NO_TAVERN_HERO;
+        resetGuildStatGate();
     }
 
     if(!readMemory(POINTER_CASTING(mapInfoAddr + MAP_INFO_TO_START_HERO_TOWN_OFFSET),
@@ -886,7 +1085,7 @@ size_t MemoryScanner::readMemoryRegion(LPCVOID regionAddress,
                    &buffer.get()[0],
                    mbi.RegionSize))
     {
-        qWarning() << "Could not scan memory for local profile.";
+        qWarning() << "Could not read memory region.";
         return 0;
     }
     return mbi.RegionSize;
@@ -1125,6 +1324,7 @@ void MemoryScanner::updateState()
         this->profileTried = false;
         this->localPlayer.tavernHero = NO_TAVERN_HERO;
         this->opponentPlayer.tavernHero = NO_TAVERN_HERO;
+        resetGuildStatGate();
         // We are not in a match so we might be in the lobby,
         // scan for trade info in chat.
         if(scanForTradeMessages() == false)

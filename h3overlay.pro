@@ -10,7 +10,7 @@ QMAKE_CXXFLAGS += -pedantic -Wall -Wextra -Wcast-qual -Wcast-align -Wstrict-null
 
 RC_ICONS = resources/images/main/icon.ico
 
-VERSION = 1.1.6.0
+VERSION = 1.1.7.0
 QMAKE_TARGET_DESCRIPTION = Heroes 3 HotA Overlay
 
 SOURCES += \
@@ -20,6 +20,7 @@ SOURCES += \
     src/maindisplay.cpp \
     src/mainwindow.cpp \
     src/memoryscanner.cpp \
+    src/offsetscanner.cpp \
     src/processhandler.cpp \
     src/resizelabel.cpp \
     src/settings.cpp \
@@ -35,6 +36,7 @@ HEADERS += \
     src/maindisplay.h \
     src/mainwindow.h \
     src/memoryscanner.h \
+    src/offsetscanner.h \
     src/processhandler.h \
     src/resizelabel.h \
     src/settings.h \

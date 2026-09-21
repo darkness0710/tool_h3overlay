@@ -55,6 +55,17 @@ private:
     void updateHeadToHead(const std::array<displayPlayerInfoStruct, 2> &displayData);
 
     /**
+     * @brief insetToPortrait How far the head to head line's edge sits from
+     * the edge of the hero portrait above it, on one side or the other. The
+     * skills are that hero's, so they hang under that hero rather than under
+     * some cell in the middle of the bar. Measured from the widgets, so it
+     * survives the bar being resized.
+     * @param rightSide true for the right hand portrait, false for the left.
+     * @return The gap in pixels, never negative.
+     */
+    int insetToPortrait(const bool rightSide) const;
+
+    /**
      * @brief updateTurnOrderIcons Puts the attack icon on the side which moves
      * first and the shield on the other. Both keep the shield while the attack
      * artwork is not present in the resources.

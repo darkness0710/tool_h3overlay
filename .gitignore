@@ -81,3 +81,4 @@ build/
 
 # Probe dumps
 *.bin
+*.dump

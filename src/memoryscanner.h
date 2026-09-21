@@ -12,6 +12,7 @@
 #include "gamestructs.h"
 #include "processhandler.h"
 #include "settings.h"
+#include "offsetscanner.h"
 
 
 class MemoryScanner : public QObject
@@ -62,6 +63,40 @@ private:
      * and match info which was copied from the game.
      */
     void clearBuffers();
+
+    /**
+     * @brief guildIsShowingHeroStats Whether the Thieves' Guild is currently
+     * revealing the primary skills of the best heroes.
+     *
+     * The guild reveals a best hero in two stages: the portrait first, and the
+     * Attack/Defense/Power/Know. box only once the player owns enough Thieves'
+     * Guilds. The best hero array fills at the first stage, so it cannot tell
+     * the two apart. What does is that drawing the box makes the game build a
+     * text widget per column holding those labels. Those words also sit in the
+     * static string tables, so only copies outside any module count.
+     *
+     * Measured on HotA 1.8.1 with the table open: one heap copy with the box
+     * blank, one per column plus that one with it filled.
+     * @return true if more than the game's own copy of the label is present.
+     */
+    bool guildIsShowingHeroStats();
+
+    /**
+     * @brief readTavernHeroStats Reads the primary skills of a player's best
+     * hero straight from the hero array, which is where the guild reads them
+     * for display, so the overlay shows the same numbers the player would see
+     * by opening the table.
+     * @param player The player whose tavernHero to read.
+     * @return true if the stats could be read and look plausible.
+     */
+    bool readTavernHeroStats(PlayerStruct &player);
+
+    /**
+     * @brief resetGuildStatGate Forgets that the Thieves' Guild ever revealed
+     * any hero stats. Called whenever the match state goes away, so a new
+     * match has to earn the gate again by opening the table.
+     */
+    void resetGuildStatGate();
 
     /**
      * @brief setLayoutSuspect Records whether the data read from the game
@@ -319,6 +354,13 @@ private:
 
     bool winLossCounted;
     bool layoutSuspect;
+    /** Whether the guild was open on the previous update, so the gate is only
+     *  re-evaluated when the table is opened rather than ten times a second. */
+    bool tavernWasOpen;
+    /** Result of the last gate check, held until the table is opened again. */
+    bool guildShowsStats;
+
+    HeroPointerLocator heroPointerLocator;
     bool mapNameTried;
     bool mapNameGeneratedTried;
     bool profileTried;

@@ -101,7 +101,7 @@
        <string notr="true">color:#E0CE75;</string>
       </property>
       <property name="text">
-       <string>Show today's record and head to head line on the overlay</string>
+       <string>Show today's record, head to head and opponent's best hero on the overlay</string>
       </property>
      </widget>
     </item>

@@ -850,7 +850,7 @@ border-width: 1px; border-style: solid; border-color: #603D22 ;border-top-style:
        <property name="font">
         <font>
          <family>Noto Serif Light</family>
-         <pointsize>10</pointsize>
+         <pointsize>13</pointsize>
          <bold>true</bold>
         </font>
        </property>

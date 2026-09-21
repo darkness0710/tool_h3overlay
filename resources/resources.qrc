@@ -5,6 +5,10 @@
         <file>images/main/player_name_icon.png</file>
         <file>images/main/rating_icon.png</file>
         <file>images/main/attack_icon.png</file>
+        <file>images/main/AttackSkill.png</file>
+        <file>images/main/DefenceSkill.png</file>
+        <file>images/main/PowerSkill.png</file>
+        <file>images/main/KnowledgeSkill.png</file>
         <file>images/main/background_dark_tile.png</file>
         <file>images/main/icon.ico</file>
         <file>images/main/clear.png</file>

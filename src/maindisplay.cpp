@@ -138,6 +138,73 @@ void MainDisplay::updateTurnOrderIcons(const std::array<displayPlayerInfoStruct,
         style.arg(rightAttacks ? ATTACK_ICON : SHIELD_ICON));
 }
 
+// The same four icons the game puts above a hero's primary skills, so the row
+// reads without a legend. They are full size art, scaled to the line height
+// here rather than on disk so they stay sharp if the line ever grows.
+static const QString ATTACK_SKILL_ICON = ":/images/main/AttackSkill.png";
+static const QString DEFENCE_SKILL_ICON = ":/images/main/DefenceSkill.png";
+static const QString POWER_SKILL_ICON = ":/images/main/PowerSkill.png";
+static const QString KNOWLEDGE_SKILL_ICON = ":/images/main/KnowledgeSkill.png";
+
+// Big enough that the four icons stay distinct at stream scale. The line they
+// sit in is a fixed 22px, so anything up to about that height costs no room:
+// measured, the overlay is 1354x69 either way.
+constexpr int SKILL_ICON_HEIGHT = 15;
+
+// Room set aside at each end of the line. Wide enough for the four icons and
+// their numbers, and used on both sides so the middle cell lands on the centre
+// of the bar instead of the centre of whatever space is left.
+constexpr int SKILLS_CELL_WIDTH = 190;
+
+/**
+ * @brief bestHeroSkills Lays the opponent's primary skills out the way the
+ * game does: attack, defence, power, knowledge, each behind its own icon.
+ * @param player The player carrying the values.
+ * @return An HTML fragment for the head to head line.
+ */
+static QString bestHeroSkills(const displayPlayerInfoStruct &player)
+{
+    // The numbers take the line's own 13pt, which is as large as this line can
+    // go before it pushes the overlay past its designed height. Measured: 13pt
+    // holds at 1354x69, 14pt makes it 70.
+    auto pair = [](const QString &icon, const QString &value) -> QString
+    {
+        return QString("<img src=\"%1\" height=\"%2\">&nbsp;%3")
+                .arg(icon, QString::number(SKILL_ICON_HEIGHT), value);
+    };
+
+    // Rich text collapses plain spaces, so the gaps between pairs have to be
+    // non breaking to survive.
+    const QString gap("&nbsp;&nbsp;");
+    return pair(ATTACK_SKILL_ICON, player.heroAttack) + gap +
+           pair(DEFENCE_SKILL_ICON, player.heroDefence) + gap +
+           pair(POWER_SKILL_ICON, player.heroPower) + gap +
+           pair(KNOWLEDGE_SKILL_ICON, player.heroKnowledge);
+}
+
+int MainDisplay::insetToPortrait(const bool rightSide) const
+{
+    // The hero portraits sit at the two ends of the bar. Lining the skills up
+    // with the outer edge of the portrait puts them under the hero they
+    // describe, and picks up the small gap the portrait already keeps from the
+    // frame, so they do not need a margin of their own.
+    const QWidget * const portrait = rightSide ? this->ui->blueHero : this->ui->redHero;
+    const QWidget * const line = this->ui->h2hLine;
+    if(portrait == nullptr || line == nullptr)
+    {
+        return 0;
+    }
+    if(rightSide)
+    {
+        const int portraitEdge = portrait->mapTo(this, QPoint(portrait->width(), 0)).x();
+        const int lineEdge = line->mapTo(this, QPoint(line->width(), 0)).x();
+        return qMax(0, lineEdge - portraitEdge);
+    }
+    const int portraitEdge = portrait->mapTo(this, QPoint(0, 0)).x();
+    const int lineEdge = line->mapTo(this, QPoint(0, 0)).x();
+    return qMax(0, portraitEdge - lineEdge);
+}
+
 void MainDisplay::updateHeadToHead(const std::array<displayPlayerInfoStruct, 2> &displayData)
 {
     // Without any player there is no match to describe, so keep the line
@@ -183,10 +250,60 @@ void MainDisplay::updateHeadToHead(const std::array<displayPlayerInfoStruct, 2> 
         }
     }
 
+    // Only the opponent ever has these, and the scanner only fills them in
+    // while the Thieves' Guild is revealing that hero's stats. Which side the
+    // opponent sits on cannot be worked out from who is local: in a hot seat
+    // match both players are, and the controller can swap the sides by hand.
+    // So take whichever side actually carries the numbers.
+    QString skills;
+    bool skillsOnRight = true;
+    for(size_t side = 0; side < displayData.size(); ++side)
+    {
+        const displayPlayerInfoStruct &player = displayData[side];
+        if(player.heroAttack.isEmpty() || player.heroDefence.isEmpty() ||
+                player.heroPower.isEmpty() || player.heroKnowledge.isEmpty())
+        {
+            continue;
+        }
+        skills = bestHeroSkills(player);
+        // The numbers belong to the opponent, so they are shown on the
+        // opponent's half of the bar. Which half that is comes from the player
+        // colours rather than from who is local, so it changes from match to
+        // match, and putting them on a fixed side would sooner or later hang
+        // the opponent's numbers under the streamer's own name.
+        skillsOnRight = side == Right;
+        break;
+    }
+
     // Rich text collapses runs of plain spaces, so the air around the
     // separator has to be non breaking.
+    const QString separator("&nbsp;&nbsp;&#183;&nbsp;&nbsp;");
+
+    // The record stays centred on the bar, and the skills sit right below the
+    // portrait of the hero they belong to. Outer cells of equal width are what
+    // keeps the middle one centred on the bar rather than merely centred in
+    // what is left over, so the record does not drift when the skills come and
+    // go, or when they move from one end to the other.
+    const int skillsInset = insetToPortrait(skillsOnRight);
+    const int outerWidth = qMax(skillsInset + SKILLS_CELL_WIDTH, SKILLS_CELL_WIDTH);
+    const QString width = QString::number(outerWidth);
+    const QString empty = QString("<td width=\"%1\"></td>").arg(width);
+    const QString filled =
+            QString("<td width=\"%1\" align=\"%2\" style=\"padding-%2:%3px\">%4</td>")
+            .arg(width,
+                 skillsOnRight ? "right" : "left",
+                 QString::number(skillsInset),
+                 skills);
+
+    const QString table =
+            QString("<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\">"
+                    "<tr>%1<td align=\"center\">%2</td>%3</tr></table>")
+            .arg(skillsOnRight ? empty : filled,
+                 segments.join(separator),
+                 skillsOnRight ? filled : empty);
+
     this->ui->h2hLine->setTextFormat(Qt::RichText);
-    this->ui->h2hLine->setText(segments.join("&nbsp;&nbsp;&#183;&nbsp;&nbsp;"));
+    this->ui->h2hLine->setText(segments.isEmpty() && skills.isEmpty() ? QString() : table);
 }
 
 MainDisplay::~MainDisplay()
