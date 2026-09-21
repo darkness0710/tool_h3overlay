@@ -169,9 +169,15 @@ def watch(game):
             note = ""
             if last is not None and state[1] != last[1]:
                 note = "  <- array changed"
-                if not opened_yet:
-                    note += " BEFORE the table was ever opened"
-            if state[0] and not opened_yet:
+                # Only meaningful while the table is shut and has never been
+                # open. A change that lands on the same tick the table opens
+                # is the game filling the array in as it draws, which is the
+                # opposite of what we are looking for.
+                if not opened_yet and not state[0]:
+                    note += " with the table never opened"
+                elif state[0] and not opened_yet:
+                    note += " as the table opened, so it is filled on draw"
+            if state[0]:
                 opened_yet = True
             print("%-10.1f %-13s %s%s"
                   % (time.time() - started,
