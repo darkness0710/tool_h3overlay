@@ -364,6 +364,10 @@ def main():
 
     game = Game(handle, exe_base)
     try:
+        if args.dialog_diff:
+            return diff_dialog(game, args.dialog_diff)
+        if args.dialog_save:
+            return dump_dialog(game, args.dialog_save)
         if args.diff:
             return diff_players(game, args.diff)
         if args.save:
