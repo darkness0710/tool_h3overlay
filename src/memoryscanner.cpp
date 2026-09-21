@@ -14,6 +14,11 @@
 
 #define POINTER_CASTING(addr) reinterpret_cast<LPCVOID>(static_cast<intptr_t>(addr))
 
+/** The best hero the Thieves' Guild reports for a player. Unused and
+ *  unrevealed slots do not hold this value, see populateTavernHero. */
+constexpr uint32_t NO_TAVERN_HERO = 0xFFFFFFFF;
+
+
 MemoryScanner::MemoryScanner(Settings *settings, QObject *parent):
     QObject(parent),
     winLossCounted(false),
@@ -48,8 +53,8 @@ void MemoryScanner::clearBuffers()
     memset(&this->localPlayer, 0, sizeof(PlayerStruct));
     memset(&this->opponentPlayer, 0, sizeof(PlayerStruct));
     memset(&this->matchInfo, 0, sizeof(MatchInfoStruct));
-    this->localPlayer.tavernHero = 0xFFFFFFFF;
-    this->opponentPlayer.tavernHero = 0xFFFFFFFF;
+    this->localPlayer.tavernHero = NO_TAVERN_HERO;
+    this->opponentPlayer.tavernHero = NO_TAVERN_HERO;
     this->proc.reset();
 
     emit playerUpdated(this->displayInfo);
@@ -135,6 +140,28 @@ void MemoryScanner::extractColoredName(PlayerStruct &player)
     }
 }
 
+/**
+ * @brief playerOwnsHero Whether a hero id is one of the player's own heroes.
+ * @param player The player to check against.
+ * @param heroID The hero id to look for.
+ * @return true if the player owns that hero.
+ */
+static bool playerOwnsHero(const PlayerStruct &player, const uint32_t heroID)
+{
+    if(heroID == NO_TAVERN_HERO)
+    {
+        return false;
+    }
+    for(const uint32_t owned: player.info.heroIDSlot)
+    {
+        if(owned == heroID)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 constexpr uint32_t HD_EXE_TO_ACTIVE_TAVERN_OFFSET = 0x2AA694;
 constexpr uint32_t HD_EXE_TO_TAVERN_BEST_HERO = 0x2AAA20;
 
@@ -148,12 +175,26 @@ bool MemoryScanner::populateTavernHero(PlayerStruct &player)
     uint32_t baseAddr = this->proc.processInfo.exeBaseAddress + HD_EXE_TO_TAVERN_BEST_HERO;
 
     uint32_t addr = baseAddr + player.playerNumber * sizeof(uint32_t);
+    uint32_t bestHero = NO_TAVERN_HERO;
     if(readMemory(POINTER_CASTING(addr),
-                  &player.tavernHero,
-                  sizeof(player.tavernHero)) == false)
+                  &bestHero,
+                  sizeof(bestHero)) == false)
     {
         return false;
     }
+
+    // Slots the game has nothing to say about read back as 0, not as
+    // NO_TAVERN_HERO, and 0 is a real hero (Orrin). Taking the value at face
+    // value would put a hero the Thieves' Guild never revealed on stream, so
+    // only accept an id the player actually owns: the best hero is by
+    // definition one of their own heroes.
+    if(playerOwnsHero(player, bestHero) == false)
+    {
+        player.tavernHero = NO_TAVERN_HERO;
+        return false;
+    }
+
+    player.tavernHero = bestHero;
     return true;
 }
 
@@ -377,7 +418,7 @@ void MemoryScanner::setDisplayInfo(PlayerStruct &player, size_t playerNumber)
     uint32_t hero = matchInfo.startHero[player.info.color];
 
     if(this->settings->getDisplayTavernHeroes() &&
-            (player.tavernHero != 0xFFFFFFFF))
+            (player.tavernHero != NO_TAVERN_HERO))
     {
         hero = player.tavernHero;
     }
@@ -620,8 +661,8 @@ bool MemoryScanner::updateMatchInfo()
     }
     if(this->proc.processInfo.activeMap == false)
     {
-        this->localPlayer.tavernHero = 0xFFFFFFFF;
-        this->opponentPlayer.tavernHero = 0xFFFFFFFF;
+        this->localPlayer.tavernHero = NO_TAVERN_HERO;
+        this->opponentPlayer.tavernHero = NO_TAVERN_HERO;
     }
 
     if(!readMemory(POINTER_CASTING(mapInfoAddr + MAP_INFO_TO_START_HERO_TOWN_OFFSET),
@@ -1082,8 +1123,8 @@ void MemoryScanner::updateState()
         this->mapNameTried = false;
         this->mapNameGeneratedTried = false;
         this->profileTried = false;
-        this->localPlayer.tavernHero = 0xFFFFFFFF;
-        this->opponentPlayer.tavernHero = 0xFFFFFFFF;
+        this->localPlayer.tavernHero = NO_TAVERN_HERO;
+        this->opponentPlayer.tavernHero = NO_TAVERN_HERO;
         // We are not in a match so we might be in the lobby,
         // scan for trade info in chat.
         if(scanForTradeMessages() == false)
