@@ -157,3 +157,38 @@ Dialog được dựng lại ở địa chỉ heap khác mỗi lần mở nên s
 trong object. Con trỏ bị dựng lại sẽ đổi lung tung và vô nghĩa, nên script
 tách riêng những byte **nhỏ ở cả hai phía** lên đầu — một mức tiết lộ là số
 nhỏ, con trỏ thì không.
+
+## find_guild_labels.py — cổng đã tìm ra
+
+Khi guild vẽ ô chỉ số, nó dựng **một text widget cho mỗi cột** chứa chuỗi
+`Attack
+Defense
+Power
+Know.`. Chuỗi này cũng nằm trong text resource của
+game, nhưng bản resource chỉ có **đúng một**, nên mọi bản dư ra đều là widget
+đang vẽ.
+
+Đo trên HotA 1.8.1, cả hai lần đều mở bảng:
+
+| Trạng thái | `Know.` trên heap |
+|---|---|
+| Ô chỉ số hiện (8 người chơi) | 9 = 1 resource + 8 widget |
+| Ô chỉ số trống (turn 1) | 1 = chỉ resource |
+
+**Quy tắc cổng:** đếm bản `Know.` nằm ngoài mọi module. Từ 2 trở lên nghĩa là
+guild đang hiện chỉ số, và overlay được phép hiện. Đúng 1 nghĩa là không.
+
+Widget nhận ra được nhờ ngữ cảnh: quanh nó là tên file ảnh của đúng cột đó
+(`PROrange.pcx`, `PRTeal.pcx`, `iTG2Red.pcx`). Bản resource thì nằm lẫn giữa
+các câu thoại không liên quan.
+
+```bash
+# mở bảng Thieves' Guild rồi chạy
+python scripts/find_guild_labels.py
+```
+
+### Mảng best hero không được xoá giữa các save
+
+Đo được: load save 3 người sau khi đã chơi save 8 người, mảng giữ nguyên 5 giá
+trị cuối của ván cũ. `populateTavernHero` vì thế phải đối chiếu hero id với
+danh sách hero người chơi sở hữu, chứ không chỉ so với `0xFFFFFFFF`.
