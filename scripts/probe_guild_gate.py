@@ -260,12 +260,83 @@ def diff_players(game, path):
     return 0
 
 
+# The guild dialog is rebuilt at a fresh heap address every time it opens, so
+# its contents are compared by offset within the object rather than by address.
+GUILD_DIALOG_BYTES = 0x400
+
+
+def dump_dialog(game, path):
+    pointer = game.tavern_pointer()
+    if not pointer:
+        print("The table is not open, so there is no dialog to read. Open the "
+              "Thieves' Guild and run this again.")
+        return 2
+    raw = probe.read(game.handle, pointer, GUILD_DIALOG_BYTES)
+    if not raw:
+        print("Could not read the dialog at 0x%X." % pointer)
+        return 2
+    with open(path, "wb") as out:
+        out.write(raw)
+    print("Dialog at 0x%X, saved %d bytes to %s" % (pointer, len(raw), path))
+    return 0
+
+
+def diff_dialog(game, path):
+    pointer = game.tavern_pointer()
+    if not pointer:
+        print("The table is not open. Open the Thieves' Guild and run again.")
+        return 2
+    raw = probe.read(game.handle, pointer, GUILD_DIALOG_BYTES)
+    if not raw:
+        print("Could not read the dialog at 0x%X." % pointer)
+        return 2
+    try:
+        with open(path, "rb") as saved:
+            before = saved.read()
+    except OSError as error:
+        print("Could not read %s: %s" % (path, error))
+        return 1
+    if len(before) != len(raw):
+        print("Saved dialog is a different size, cannot compare.")
+        return 1
+
+    print("Dialog now at 0x%X, compared against %s by offset.\n"
+          % (pointer, path))
+    # Heap addresses differ between openings, so a changed 32 bit value that
+    # looks like a pointer says nothing. Small values are what a reveal level
+    # would look like.
+    interesting = []
+    for i in range(GUILD_DIALOG_BYTES):
+        if before[i] != raw[i]:
+            interesting.append((i, before[i], raw[i]))
+    if not interesting:
+        print("  nothing changed")
+        return 0
+    print("  %d of %d bytes differ. Small values on both sides first, since a "
+          "reveal level\n  is a small number and a rebuilt pointer is not:\n"
+          % (len(interesting), GUILD_DIALOG_BYTES))
+    small = [row for row in interesting if row[1] < 16 and row[2] < 16]
+    for offset, old, new in small:
+        print("    +0x%-4X %3d -> %3d" % (offset, old, new))
+    if not small:
+        print("    none")
+    print("\n  everything else:")
+    for offset, old, new in interesting:
+        if (offset, old, new) not in small:
+            print("    +0x%-4X %3d -> %3d" % (offset, old, new))
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--watch", action="store_true",
                         help="keep printing whenever something changes")
+    parser.add_argument("--dialog-save", metavar="FILE",
+                        help="save the open guild dialog for later comparison")
+    parser.add_argument("--dialog-diff", metavar="FILE",
+                        help="compare the open guild dialog against a saved one")
     parser.add_argument("--save", metavar="FILE",
                         help="save every player struct for later comparison")
     parser.add_argument("--diff", metavar="FILE",

@@ -122,3 +122,38 @@ hợp đó.
 
 Chạy không tham số để đọc một lần. Nó cũng in player section (màu, số hero,
 số town, danh sách hero sở hữu) để đối chiếu.
+
+### Đã đo được: guild tiết lộ theo nhiều nấc
+
+Đo trên HotA 1.8.1, ván mới Month 1 Week 1 Day 1, chưa có Thieves' Guild nào:
+
+| Mức | Bảng hiện gì | Mảng `0x2AAA20` |
+|---|---|---|
+| 0 | Số town, số hero, **chân dung** best hero | **đã đầy đủ** |
+| cao hơn | thêm Gold, Wood & Ore, **chỉ số** best hero | đầy đủ |
+
+Nghĩa là mảng ứng với **chân dung**, không ứng với **chỉ số**. Nó đầy ngay từ
+lượt 1 trong khi ô chỉ số trên màn hình vẫn trống.
+
+**Hệ quả:** không được dùng mảng này làm cổng để quyết định có hiện 4 chỉ số
+của đối thủ hay không. Làm vậy là hiện thông tin game chưa cho người chơi xem.
+Cổng đúng phải là mức tiết lộ, tức số lượng Thieves' Guild sở hữu, và chỗ đó
+vẫn chưa tìm ra.
+
+### Chụp và so sánh dialog
+
+Game quyết định vẽ hay không vẽ ô chỉ số ở đâu đó. Ứng viên là object dialog
+mà `exe+0x2AA694` trỏ tới:
+
+```bash
+# mở bảng khi CHUA lo chi so (ván mới, chưa xây guild):
+python scripts/probe_guild_gate.py --dialog-save dialog_nostats.bin
+
+# xây Thieves' Guild cho tới khi ô chỉ số hiện ra, mở bảng lại:
+python scripts/probe_guild_gate.py --dialog-diff dialog_nostats.bin
+```
+
+Dialog được dựng lại ở địa chỉ heap khác mỗi lần mở nên so sánh theo offset
+trong object. Con trỏ bị dựng lại sẽ đổi lung tung và vô nghĩa, nên script
+tách riêng những byte **nhỏ ở cả hai phía** lên đầu — một mức tiết lộ là số
+nhỏ, con trỏ thì không.
