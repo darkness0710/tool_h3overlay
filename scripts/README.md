@@ -95,3 +95,30 @@ chỉ được set ở một trong hai đường — nên nó bằng 0 **không*
 
 Điều này cũng có nghĩa tính năng hiện tại (hiện best hero của đối thủ) có thể
 đang bỏ sót khi người chơi vào bảng bằng đường không qua Tavern.
+
+## probe_guild_gate.py
+
+Trả lời một câu duy nhất: **game có tự duy trì mảng best-hero, hay chỉ ghi vào
+lúc vẽ bảng Thieves' Guild?**
+
+Câu này quyết định overlay có hiện được 4 chỉ số của đối thủ mà không bắt
+người chơi mở bảng hay không:
+
+- **Tự duy trì** — mảng đã đúng ngay từ đầu trận. Slot rỗng nghĩa là guild
+  không cho xem, slot có hero nghĩa là có. Cổng hoàn chỉnh, không cần offset
+  mới nào.
+- **Chỉ ghi lúc vẽ** — overlay không phân biệt được "guild không cho xem" với
+  "chưa mở bảng lần nào", vì cả hai đều rỗng. Phải đi tìm nơi lưu số lượng
+  Thieves' Guild.
+
+```bash
+# vào trận, CHUA mo bang, rồi chạy:
+python scripts/probe_guild_gate.py --watch
+```
+
+Nó in một dòng mỗi khi mảng hoặc con trỏ tavern đổi. Điều cần nhìn: mảng có
+điền vào **trước** khi bảng được mở lần nào không — script đánh dấu rõ trường
+hợp đó.
+
+Chạy không tham số để đọc một lần. Nó cũng in player section (màu, số hero,
+số town, danh sách hero sở hữu) để đối chiếu.
