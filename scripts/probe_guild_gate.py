@@ -187,12 +187,89 @@ def watch(game):
         time.sleep(POLL_SECONDS)
 
 
+# Fields of PlayerBaseStruct we already understand, so a diff can say which
+# changes are already explained and which are in unmapped padding.
+KNOWN_FIELDS = [
+    (0, 1, "color"), (1, 1, "nrOfHeroes"), (4, 4, "selectedHeroID"),
+    (8, 32, "heroIDSlot"), (62, 1, "nrOfTowns"), (63, 1, "selectedTown"),
+    (64, 8, "ownedTownID"), (156, 28, "resources"), (204, 20, "playerName"),
+    (225, 1, "isLocal"), (226, 1, "isHuman"), (228, 1, "isRemote"),
+]
+
+
+def name_field(offset):
+    for start, size, name in KNOWN_FIELDS:
+        if start <= offset < start + size:
+            return "%s+%d" % (name, offset - start)
+    return "unmapped"
+
+
+def dump_players(game, path):
+    section = game.player_section()
+    if not section:
+        print("Could not read the player section.")
+        return 2
+    raw = probe.read(game.handle, section, PLAYER_STRUCT_SIZE * MAX_PLAYERS)
+    if not raw:
+        print("Could not read the player section.")
+        return 2
+    with open(path, "wb") as out:
+        out.write(raw)
+    print("Saved %d bytes of player structs to %s" % (len(raw), path))
+    return 0
+
+
+def diff_players(game, path):
+    section = game.player_section()
+    raw = probe.read(game.handle, section, PLAYER_STRUCT_SIZE * MAX_PLAYERS) \
+        if section else None
+    if not raw:
+        print("Could not read the player section.")
+        return 2
+    try:
+        with open(path, "rb") as saved:
+            before = saved.read()
+    except OSError as error:
+        print("Could not read %s: %s" % (path, error))
+        return 1
+    if len(before) != len(raw):
+        print("Saved snapshot is a different size, cannot compare.")
+        return 1
+
+    print("Differences against %s:\n" % path)
+    found = False
+    for index in range(MAX_PLAYERS):
+        base = index * PLAYER_STRUCT_SIZE
+        rows = []
+        for i in range(PLAYER_STRUCT_SIZE):
+            if before[base + i] != raw[base + i]:
+                rows.append((i, before[base + i], raw[base + i]))
+        if not rows:
+            continue
+        found = True
+        print("player %d:" % index)
+        for offset, old, new in rows:
+            print("  +%-4d %-16s %3d -> %3d%s"
+                  % (offset, name_field(offset), old, new,
+                     "   <- candidate" if name_field(offset) == "unmapped"
+                     else ""))
+    if not found:
+        print("  nothing changed")
+    print("\nA guild count would show up as an unmapped byte going up by one "
+          "on the player\nwho built it, and staying put for everyone else.")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--watch", action="store_true",
                         help="keep printing whenever something changes")
+    parser.add_argument("--save", metavar="FILE",
+                        help="save every player struct for later comparison")
+    parser.add_argument("--diff", metavar="FILE",
+                        help="compare the player structs against a saved file")
     args = parser.parse_args()
 
     found = probe.find_process()
@@ -216,6 +293,10 @@ def main():
 
     game = Game(handle, exe_base)
     try:
+        if args.diff:
+            return diff_players(game, args.diff)
+        if args.save:
+            return dump_players(game, args.save)
         if args.watch:
             watch(game)
         else:
