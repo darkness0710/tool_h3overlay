@@ -58,3 +58,40 @@ cụm 4 số nhỏ liên tiếp — tức ứng viên cho công/thủ/sức mạ
 trên màn hình game.
 
 Exit code: `0` = đọc được, `2` = game không chạy hoặc không attach được.
+
+**Hạn chế:** chỉ dump ±1.5KB quanh mảng best-hero. Nếu chỉ số được lưu xa hơn
+thì script này không thấy. Dùng `find_guild_stats.py` bên dưới thay thế.
+
+## find_guild_stats.py
+
+Quét **toàn bộ** memory của game để tìm đúng những con số đang hiện trên bảng
+Thieves' Guild. Đọc chỉ số trên màn hình rồi truyền vào:
+
+```bash
+python scripts/find_guild_stats.py --stats 1,0,3,2 0,2,1,2 2,2,1,1
+```
+
+Thứ tự các `--stats` theo đúng thứ tự cột (1st, 2nd, 3rd).
+
+Script tìm cả hai kiểu lưu (4 byte liền nhau, và 4 giá trị uint32), rồi gom
+các kết quả nằm gần nhau thành cụm. **Cụm chứa nhiều hơn một người chơi mới
+đáng quan tâm** — một cụm 4 số nhỏ đứng lẻ gần như luôn là trùng ngẫu nhiên,
+còn nhiều người chơi nằm cạnh nhau chính là hình dạng của một bảng hiển thị.
+
+Mỗi kết quả được quy về module chứa nó, và đó là điều quyết định:
+
+| Nằm ở | Kết luận |
+|---|---|
+| `h3hota.exe+0x...` | Dùng được — exe không bị build lại từ 2023 |
+| `hota.dll+0x...` | Dùng được nhưng vỡ mỗi bản HotA update |
+| heap | Cần lần được chuỗi con trỏ từ một chỗ ổn định |
+
+### Lưu ý: game có hai đường vào bảng này
+
+Vào qua Tavern và vào thẳng Thieves' Guild có thể không chạy cùng một đoạn
+code. Con trỏ `exe+0x2AA694` mà overlay đang dùng để biết "tavern đang mở"
+chỉ được set ở một trong hai đường — nên nó bằng 0 **không** có nghĩa là bảng
+đang đóng. Nếu quét một đường không ra kết quả, thử nốt đường kia.
+
+Điều này cũng có nghĩa tính năng hiện tại (hiện best hero của đối thủ) có thể
+đang bỏ sót khi người chơi vào bảng bằng đường không qua Tavern.
