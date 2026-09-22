@@ -141,10 +141,10 @@ void MainDisplay::updateTurnOrderIcons(const std::array<displayPlayerInfoStruct,
 // The same four icons the game puts above a hero's primary skills, so the row
 // reads without a legend. They are full size art, scaled to the line height
 // here rather than on disk so they stay sharp if the line ever grows.
-static const QString ATTACK_SKILL_ICON = ":/images/main/AttackSkill.png";
-static const QString DEFENCE_SKILL_ICON = ":/images/main/DefenceSkill.png";
-static const QString POWER_SKILL_ICON = ":/images/main/PowerSkill.png";
-static const QString KNOWLEDGE_SKILL_ICON = ":/images/main/KnowledgeSkill.png";
+static const QString ATTACK_SKILL_ICON = ":/images/main/attack_skill_icon.png";
+static const QString DEFENCE_SKILL_ICON = ":/images/main/defence_skill_icon.png";
+static const QString POWER_SKILL_ICON = ":/images/main/power_skill_icon.png";
+static const QString KNOWLEDGE_SKILL_ICON = ":/images/main/knowledge_skill_icon.png";
 
 // Big enough that the four icons stay distinct at stream scale. The line they
 // sit in is a fixed 22px, so anything up to about that height costs no room:
@@ -324,10 +324,13 @@ void MainDisplay::update( const std::array<displayPlayerInfoStruct, 2> &displayD
     this->ui->blueHero->setStyleSheet("QFrame{border-image:  url(:/images/heroes/Hero_" +
                                       displayData[Right].hero + ".png) 0 0 0 0 stretch stretch;}");
 
+    // The colour arrives capitalised, as the game names it, while the files in
+    // main are all lower case. Lowering here keeps that one folder to a single
+    // naming rule instead of carving out an exception for the flags.
     this->ui->redFlag->setStyleSheet("border-image:  url(:/images/main/" +
-                                     displayData[Left].playerColor + "_flag.png) 0 0 0 0 stretch stretch;  color:#F9E687");
+                                     displayData[Left].playerColor.toLower() + "_flag.png) 0 0 0 0 stretch stretch;  color:#F9E687");
     this->ui->blueFlag->setStyleSheet("border-image:  url(:/images/main/" +
-                                      displayData[Right].playerColor + "_flag.png) 0 0 0 0 stretch stretch;  color:#F9E687");
+                                      displayData[Right].playerColor.toLower() + "_flag.png) 0 0 0 0 stretch stretch;  color:#F9E687");
 
 
     this->ui->redMoney->setText(displayData[Left].money);

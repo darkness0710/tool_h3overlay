@@ -15,6 +15,10 @@ struct hotaMetaStruct
 {
     QString localRating;
     QString opponentRating;
+    /** Thumbs up the lobby shows next to a player. Comes back on the same
+     *  request as the rating, so it costs nothing extra to have. */
+    QString localLikes;
+    QString opponentLikes;
     QString todayWins;
     QString todayLosses;
     QString todayRatingChange;
@@ -65,6 +69,18 @@ public:
     void clear();
 
     const hotaMetaStruct & data() const;
+
+    /**
+     * @brief belongsToLocal Whether a player name is the one this client
+     * fetched as the local player.
+     *
+     * Needed because the isLocal flag the game reports cannot separate the two
+     * sides of a hot seat match, where both players are local. Names can, and
+     * they are what the requests were keyed on in the first place.
+     * @param name The player name to test.
+     * @return true if it is the local player of the current pair.
+     */
+    bool belongsToLocal(const QString &name) const;
 
 signals:
     /**

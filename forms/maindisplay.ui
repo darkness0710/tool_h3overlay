@@ -194,7 +194,7 @@
                  </size>
                 </property>
                 <property name="styleSheet">
-                 <string notr="true">border-image:  url(:/images/main/money_icon.png) 0 0 0 0 stretch stretch;
+                 <string notr="true">border-image:  url(:/images/main/like_icon.png) 0 0 0 0 stretch stretch;
 </string>
                 </property>
                 <property name="text">
@@ -441,7 +441,7 @@ border-width: 1px; border-left-style: solid; border-color: #603D22 ;border-top-s
             </font>
            </property>
            <property name="styleSheet">
-            <string notr="true">border-image:  url(:/images/main/Red_flag.png) 0 0 0 0 stretch stretch;  color:#F9E687</string>
+            <string notr="true">border-image:  url(:/images/main/red_flag.png) 0 0 0 0 stretch stretch;  color:#F9E687</string>
            </property>
            <property name="text">
             <string/>
@@ -505,7 +505,7 @@ border-width: 1px; border-left-style: solid; border-color: #603D22 ;border-top-s
             </font>
            </property>
            <property name="styleSheet">
-            <string notr="true">border-image:  url(:/images/main/Blue_flag.png) 0 0 0 0 stretch stretch;  color:#F9E687</string>
+            <string notr="true">border-image:  url(:/images/main/blue_flag.png) 0 0 0 0 stretch stretch;  color:#F9E687</string>
            </property>
            <property name="text">
             <string/>
@@ -766,7 +766,7 @@ border-width: 1px; border-style: solid; border-color: #603D22 ;border-top-style:
                  </size>
                 </property>
                 <property name="styleSheet">
-                 <string notr="true">border-image:  url(:/images/main/money_icon.png) 0 0 0 0 stretch stretch;
+                 <string notr="true">border-image:  url(:/images/main/like_icon.png) 0 0 0 0 stretch stretch;
 </string>
                 </property>
                 <property name="text">

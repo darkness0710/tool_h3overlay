@@ -1,14 +1,14 @@
 <RCC>
     <qresource prefix="/">
         <file>images/main/background_tile.png</file>
-        <file>images/main/money_icon.png</file>
+        <file>images/main/like_icon.png</file>
         <file>images/main/player_name_icon.png</file>
         <file>images/main/rating_icon.png</file>
         <file>images/main/attack_icon.png</file>
-        <file>images/main/AttackSkill.png</file>
-        <file>images/main/DefenceSkill.png</file>
-        <file>images/main/PowerSkill.png</file>
-        <file>images/main/KnowledgeSkill.png</file>
+        <file>images/main/attack_skill_icon.png</file>
+        <file>images/main/defence_skill_icon.png</file>
+        <file>images/main/power_skill_icon.png</file>
+        <file>images/main/knowledge_skill_icon.png</file>
         <file>images/main/background_dark_tile.png</file>
         <file>images/main/icon.ico</file>
         <file>images/main/clear.png</file>
@@ -242,13 +242,13 @@
         <file>images/heroes/Hero_Spadum.png</file>
         <file>images/heroes/Hero_Vehr.png</file>
         <file>images/towns/Factory.png</file>
-        <file>images/main/Blue_flag.png</file>
-        <file>images/main/Green_flag.png</file>
-        <file>images/main/Orange_flag.png</file>
-        <file>images/main/Pink_flag.png</file>
-        <file>images/main/Purple_flag.png</file>
-        <file>images/main/Red_flag.png</file>
-        <file>images/main/Tan_flag.png</file>
-        <file>images/main/Teal_flag.png</file>
+        <file>images/main/blue_flag.png</file>
+        <file>images/main/green_flag.png</file>
+        <file>images/main/orange_flag.png</file>
+        <file>images/main/pink_flag.png</file>
+        <file>images/main/purple_flag.png</file>
+        <file>images/main/red_flag.png</file>
+        <file>images/main/tan_flag.png</file>
+        <file>images/main/teal_flag.png</file>
     </qresource>
 </RCC>

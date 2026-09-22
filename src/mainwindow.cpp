@@ -287,6 +287,11 @@ void MainWindow::getUpdate(const displayInfoStruct &automaticData)
 
     // The client itself ignores a pair it has already fetched, so this is
     // cheap even though this slot runs ten times a second.
+    //
+    // In a hot seat match both players are local and this picks one of them
+    // arbitrarily. That is harmless: it only decides which name the client
+    // files as "local", and sendUpdate reads the answers back by name, so the
+    // two always agree on who is who.
     const size_t localIndex = this->autoData.player[Right].isLocalPlayer ? Right : Left;
     const size_t remoteIndex = (localIndex == Left) ? Right : Left;
     this->hotaMeta->setPlayers(this->autoData.player[localIndex].name,
@@ -396,12 +401,20 @@ void MainWindow::sendUpdate()
     // for the opponent without having to hover them in the game lobby first.
     // An empty value means the request has not answered, so keep the fallback.
     const hotaMetaStruct &meta = this->hotaMeta->data();
+
+    // Which half of the fetched data belongs to which side is decided by the
+    // player's name, not by the isLocal flag the game reports. In a hot seat
+    // match both players are local, so that flag would hand the same numbers
+    // to both sides.
+    const bool leftIsLocal = this->hotaMeta->belongsToLocal(leftInput->name);
+    const bool rightIsLocal = this->hotaMeta->belongsToLocal(rightInput->name);
+
     QString leftRating = leftInput->rating;
     QString rightRating = rightInput->rating;
     const QString &leftMetaRating =
-            leftInput->isLocalPlayer ? meta.localRating : meta.opponentRating;
+            leftIsLocal ? meta.localRating : meta.opponentRating;
     const QString &rightMetaRating =
-            rightInput->isLocalPlayer ? meta.localRating : meta.opponentRating;
+            rightIsLocal ? meta.localRating : meta.opponentRating;
     if(leftMetaRating.isEmpty() == false)
     {
         leftRating = leftMetaRating;
@@ -411,44 +424,48 @@ void MainWindow::sendUpdate()
         rightRating = rightMetaRating;
     }
 
-    // Same for the gold trade. Reading it from the lobby chat only worked if
-    // the overlay happened to be running when the trade was announced, the
-    // API reports it for the running match either way.
-    QString leftMoney = leftInput->money;
-    QString rightMoney = rightInput->money;
-    const QString &leftMetaTrade =
-            leftInput->isLocalPlayer ? meta.localTrade : meta.opponentTrade;
-    const QString &rightMetaTrade =
-            rightInput->isLocalPlayer ? meta.localTrade : meta.opponentTrade;
-    if(leftMetaTrade.isEmpty() == false)
-    {
-        leftMoney = leftMetaTrade;
-    }
-    if(rightMetaTrade.isEmpty() == false)
-    {
-        rightMoney = rightMetaTrade;
-    }
+    // That slot now carries the thumbs up the lobby shows beside a player
+    // rather than the agreed gold trade. The trade is still gathered, from
+    // the lobby chat and from the API, and can still be typed in by hand, but
+    // it is the likes that go on the bar.
+    //
+    // Zero rather than blank while the request is still out or the name is not
+    // one the site knows: the slot has always carried a number, and an empty
+    // box next to the icon reads as something being broken.
+    const QString NO_LIKES("0");
+    const QString &leftLikesValue = leftIsLocal ? meta.localLikes : meta.opponentLikes;
+    const QString &rightLikesValue = rightIsLocal ? meta.localLikes : meta.opponentLikes;
+    const QString leftLikes = leftLikesValue.isEmpty() ? NO_LIKES : leftLikesValue;
+    const QString rightLikes = rightLikesValue.isEmpty() ? NO_LIKES : rightLikesValue;
 
     // Head to head is stored on the local player, whose point of view it is,
     // and so is today's record.
-    const size_t localSide = dataToSend[Right].isLocalPlayer ? Right : Left;
+    const size_t localSide = rightIsLocal ? Right : Left;
     dataToSend[localSide].h2hWins = meta.h2hWins;
     dataToSend[localSide].h2hLosses = meta.h2hLosses;
     dataToSend[localSide].todayWins = meta.todayWins;
     dataToSend[localSide].todayLosses = meta.todayLosses;
     dataToSend[localSide].todayRatingChange = meta.todayRatingChange;
 
+    // The score is the one field with no automatic value behind it. It counts
+    // wins against the same opponent across a sitting, which only means
+    // something in a run of games against one player, and the counter cannot
+    // know whether it was running for the earlier ones. Left blank unless it
+    // is typed in, so a flag showing nothing reads as "no score here" rather
+    // than as a genuine nil.
+    const QString noAutomaticScore;
+
     dataToSend[Left].name =    setText(this->ui->redNameEdit,    leftInput->name);
     dataToSend[Left].rating =  setText(this->ui->redRatingEdit,  leftRating);
-    dataToSend[Left].money =   setText(this->ui->redTradeEdit,   leftMoney);
-    dataToSend[Left].wins =    setText(this->ui->redWinEdit,     leftInput->wins);
+    dataToSend[Left].money =   setText(this->ui->redTradeEdit,   leftLikes);
+    dataToSend[Left].wins =    setText(this->ui->redWinEdit,     noAutomaticScore);
     dataToSend[Left].town =    setText(this->ui->redTownBox,     leftInput->town);
     dataToSend[Left].hero =    setText(this->ui->redHeroBox,     leftInput->hero);
 
     dataToSend[Right].name =   setText(this->ui->blueNameEdit,   rightInput->name);
     dataToSend[Right].rating = setText(this->ui->blueRatingEdit, rightRating);
-    dataToSend[Right].money =  setText(this->ui->blueTradeEdit,  rightMoney);
-    dataToSend[Right].wins =   setText(this->ui->blueWinEdit,    rightInput->wins);
+    dataToSend[Right].money =  setText(this->ui->blueTradeEdit,  rightLikes);
+    dataToSend[Right].wins =   setText(this->ui->blueWinEdit,    noAutomaticScore);
     dataToSend[Right].town =   setText(this->ui->blueTownBox,    rightInput->town);
     dataToSend[Right].hero =   setText(this->ui->blueHeroBox,    rightInput->hero);
 

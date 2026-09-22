@@ -306,7 +306,7 @@ if the fields are left empty. The title will be the map name.</string>
                 <string notr="true">color:#E0CE75;</string>
                </property>
                <property name="text">
-                <string>Trade</string>
+                <string>Likes</string>
                </property>
               </widget>
              </item>
@@ -671,7 +671,7 @@ if the fields are left empty. The title will be the map name.</string>
                 <string notr="true">color:#E0CE75;</string>
                </property>
                <property name="text">
-                <string>Trade</string>
+                <string>Likes</string>
                </property>
               </widget>
              </item>

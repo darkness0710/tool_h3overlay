@@ -44,6 +44,13 @@ void HotaMetaClient::clear()
     this->opponent.clear();
 }
 
+bool HotaMetaClient::belongsToLocal(const QString &name) const
+{
+    // The lobby treats names case insensitively and the API answers in lower
+    // case, so neither side of this can be trusted to match exactly.
+    return name.compare(this->local, Qt::CaseInsensitive) == 0;
+}
+
 void HotaMetaClient::setPlayers(const QString &localName, const QString &opponentName)
 {
     if(localName.isEmpty() || opponentName.isEmpty())
@@ -140,13 +147,20 @@ void HotaMetaClient::fetchRating(const QString &name, bool isLocal)
             return;
         }
         const QString rating = QString::number(object.value("rating").toInt());
+        // The same reply carries the thumbs up count the lobby shows beside
+        // the rating, so it is taken here rather than asked for separately.
+        const QString likes = object.contains("likes")
+                ? QString::number(object.value("likes").toInt())
+                : QString();
         if(isLocal)
         {
             this->fetched.localRating = rating;
+            this->fetched.localLikes = likes;
         }
         else
         {
             this->fetched.opponentRating = rating;
+            this->fetched.opponentLikes = likes;
         }
     });
 }
