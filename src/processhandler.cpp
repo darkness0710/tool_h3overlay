@@ -281,17 +281,29 @@ bool ProcessHandler::updateGameAddresses()
     }
 
 
-    uint32_t step1 = followPointer(this->processInfo.exeBaseAddress + HOTA_EXE_TO_PLAYER_SECTION);
-    uint32_t step2 = followPointer(step1 + HOTA_EXE_TO_PLAYER_SECTION_OFFSET1) ;
-    this->processInfo.playerSectionAddress = step2 + HOTA_EXE_TO_PLAYER_SECTION_OFFSET2;
-
-    if(this->processInfo.playerSectionAddress == 0)
-    {
-        qWarning() << "Could not get player section struct address.";
-        return false;
-    }
+    this->processInfo.playerSectionAddress = getPlayerSectionAddress();
     qInfo() << "Game addresses updated.";
     return true;
+}
+
+uint32_t ProcessHandler::getPlayerSectionAddress()
+{
+    if(this->processInfo.exeBaseAddress == 0 || this->processInfo.handle == nullptr)
+    {
+        return 0;
+    }
+    uint32_t step1 = followPointer(this->processInfo.exeBaseAddress + HOTA_EXE_TO_PLAYER_SECTION);
+    if(step1 == 0)
+    {
+        return 0;
+    }
+    uint32_t step2 = followPointer(step1 + HOTA_EXE_TO_PLAYER_SECTION_OFFSET1);
+    if(step2 < 0x10000)
+    {
+        return 0;
+    }
+    this->processInfo.playerSectionAddress = step2 + HOTA_EXE_TO_PLAYER_SECTION_OFFSET2;
+    return this->processInfo.playerSectionAddress;
 }
 
 

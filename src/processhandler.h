@@ -47,6 +47,13 @@ public:
     bool isGameStillRunning();
 
     /**
+     * @brief getPlayerSectionAddress Resolves the player section address dynamically
+     * from the active match scenario pointer.
+     * @return The address if valid (in match), or 0 if not available.
+     */
+    uint32_t getPlayerSectionAddress();
+
+    /**
      * @brief findMapAddress Finds and stores the memory location for the
      * descirption of the map. This can only be found when a match is active.
      */

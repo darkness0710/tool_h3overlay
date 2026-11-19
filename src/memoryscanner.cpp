@@ -457,8 +457,13 @@ static bool isPlausiblePlayer(const PlayerBaseStruct &player)
             terminated = true;
             break;
         }
-        if(static_cast<unsigned char>(character) < 0x20 ||
-                static_cast<unsigned char>(character) > 0x7E)
+        const unsigned char uc = static_cast<unsigned char>(character);
+        // The game allows color prefix codes (0x17 - 0x1F) before player names
+        if(uc >= 0x17 && uc < 0x20)
+        {
+            continue;
+        }
+        if(uc < 0x20 || uc == 0x7F)
         {
             return false;
         }
@@ -473,9 +478,15 @@ bool MemoryScanner::updatePlayersInfo()
         return false;
     }
 
+    uint32_t playerSection = this->proc.getPlayerSectionAddress();
+    if(playerSection == 0)
+    {
+        return false;
+    }
+
     PlayerBaseStruct players[8];
     bool localAlreadySet = false;
-    if(!readMemory(POINTER_CASTING(this->proc.processInfo.playerSectionAddress),
+    if(!readMemory(POINTER_CASTING(playerSection),
                     &players[0],
                     sizeof(players)))
     {
