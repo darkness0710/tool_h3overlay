@@ -457,9 +457,22 @@ static bool isPlausiblePlayer(const PlayerBaseStruct &player)
             terminated = true;
             break;
         }
+        // Names the game draws in a color (green for supporters, say) start
+        // with one of its text color codes, which extractColoredName strips
+        // later. Those are part of a real name, not a sign of garbage.
+        if(static_cast<unsigned char>(character) >= GameTextColor::Green &&
+                static_cast<unsigned char>(character) < 0x20)
+        {
+            continue;
+        }
         if(static_cast<unsigned char>(character) < 0x20 ||
                 static_cast<unsigned char>(character) > 0x7E)
         {
+            // Raw bytes tell a new text color code from a moved struct at a
+            // glance, which the warning in the status bar cannot.
+            qWarning() << "Rejected player name bytes:"
+                       << QByteArray(player.playerName.data(),
+                                     static_cast<qsizetype>(player.playerName.size())).toHex(' ');
             return false;
         }
     }
