@@ -63,6 +63,27 @@ public:
     void refresh();
 
     /**
+     * @brief refreshAfterMatch Called when a match has just finished.
+     *
+     * The API only reflects a finished game within about two minutes of it
+     * ending, so asking once at the WIN/LOSE popup got the rating from before
+     * the game, which then stayed on screen for a whole rematch. Two things
+     * cover that gap:
+     *
+     * - The local player's new rating is worked out at once from the change
+     *   the popup shows, and kept until the API reports something other than
+     *   the rating from before the game. The API wins from then on, and a
+     *   difference between the two is logged.
+     * - The ratings, today's record and the head to head score are re-read a
+     *   few more times over the next minutes. The opponent's rating relies on
+     *   this alone, since the popup only shows the local player's change.
+     *
+     * @param localRatingDelta The change the popup shows, e.g. "-18". Empty or
+     * unparsable leaves the local rating to the API.
+     */
+    void refreshAfterMatch(const QString &localRatingDelta);
+
+    /**
      * @brief clear Forgets the current players and their statistics, so the
      * next match starts from a clean state.
      */
@@ -103,6 +124,10 @@ private:
     void fetchToday(const QString &name);
     void fetchHeadToHead(const QString &local, const QString &opponent);
 
+    /** Re-reads what a finished game changes, but not the trade, which
+     *  belongs to the next match and has its own retries. */
+    void refreshResults();
+
     /**
      * @brief fetchTrade Reads the agreed gold trade for the running match from
      * the live lobby. The lobby only publishes the picks a little while after
@@ -117,6 +142,19 @@ private:
     hotaMetaStruct fetched;
     QString local;
     QString opponent;
+    /** Bumped whenever the pair of players is forgotten, so follow-up
+     *  refreshes scheduled for an earlier pair can tell they are stale. */
+    unsigned int generation = 0;
+
+    /** A local rating worked out from the WIN/LOSE popup, held until the API
+     *  catches up with the game it was worked out from. */
+    struct PendingRating
+    {
+        bool active = false;
+        QString player;
+        int before = 0;
+        int expected = 0;
+    } pendingLocal;
 };
 
 #endif // HOTAMETACLIENT_H

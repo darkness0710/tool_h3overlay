@@ -302,7 +302,7 @@ void MainWindow::getUpdate(const displayInfoStruct &automaticData)
     // showing the numbers from before the game.
     if(matchJustFinished)
     {
-        this->hotaMeta->refresh();
+        this->hotaMeta->refreshAfterMatch(this->autoData.ratingDelta);
     }
 
     sendUpdate();
