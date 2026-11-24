@@ -84,6 +84,8 @@ private:
     MainDisplay *mainDisplay;
     StatisticsDatabase *matches;
     HotaMetaClient *hotaMeta;
+    /** The match the online statistics were last refreshed for. */
+    uint32_t lastMatchSerial = 0;
 
 private slots:
     /**

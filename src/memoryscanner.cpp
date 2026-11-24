@@ -573,6 +573,12 @@ bool MemoryScanner::checkIfInMatch()
 
     this->proc.processInfo.isInMatch = static_cast<bool>(status.isInMatchPointer);
 
+    if(this->proc.processInfo.isInMatch && wasInMatch == false)
+    {
+        // Part of the player struct so the change is sure to be sent on.
+        ++this->localPlayer.matchSerial;
+    }
+
     if(this->proc.processInfo.isInMatch == false && wasInMatch == true)
     {
         this->tradeResult[Left] = "0";
@@ -943,7 +949,9 @@ void MemoryScanner::updateMatchResult()
     //   YOU WIN!
     //   Rating: +25
     // Not searching for english character to support non-english game clients.
-    static QRegularExpression re("\\!.*: ([+-][0-9]+)$",
+    // The game prints a gain as "+25" and a loss or no change as "-18" or
+    // "0", so the sign is optional.
+    static QRegularExpression re("\\!.*: ([+-]?[0-9]+)$",
                                  QRegularExpression::DotMatchesEverythingOption);
     QRegularExpressionMatch match;
     char resultColor = 0;
@@ -1385,6 +1393,7 @@ void MemoryScanner::updateState()
         this->displayInfo.player[1].money = this->tradeResult[opponentPlayer.info.color > localPlayer.info.color];
         setDisplayInfo(this->localPlayer, 0);
         setDisplayInfo(this->opponentPlayer, 1);
+        this->displayInfo.matchSerial = this->localPlayer.matchSerial;
 
         // Only trigger a GUI update if new data is available to reduce CPU usage.
         if(memcmp(&this->localPlayer, &this->prevLocalPlayer, sizeof(PlayerStruct)) != 0 ||

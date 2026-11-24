@@ -13,7 +13,7 @@ static const QString API_BASE = "https://hotameta.com";
 // The API asks clients to identify themselves so that named clients can be
 // warned before a breaking change. A generic agent is treated as a scraper and
 // answered with 403.
-static const QByteArray USER_AGENT = "h3overlay/1.1.4.0 (Heroes3 HotA stream overlay)";
+static const QByteArray USER_AGENT = "h3overlay/1.1.8.3 (Heroes3 HotA stream overlay)";
 
 // The service allows five requests per second. A whole match needs four, so
 // the only reason to ever back off is a shared address being over the limit.
@@ -26,10 +26,21 @@ constexpr int MAX_RETRY_SECONDS = 60;
 constexpr int TRADE_ATTEMPTS = 8;
 constexpr int TRADE_RETRY_SECONDS = 15;
 
-// The API reflects a finished game "within about two minutes" of it ending.
-// Re-read at these points after the WIN/LOSE popup, the last one comfortably
-// past that window.
-constexpr int AFTER_MATCH_REFRESH_SECONDS[] = { 30, 75, 150 };
+// The API takes one to two and a half minutes to show a finished game, going
+// by games watched finishing on its match feed. After a game, poll at this
+// interval until both ratings have moved, for at most this long.
+constexpr int RESULT_POLL_SECONDS = 30;
+constexpr int RESULT_POLL_LIMIT_SECONDS = 300;
+
+// When a match starts the opponent may have finished another game moments
+// before, which the API is not showing yet. Re-read the ratings at these
+// points to catch that.
+constexpr int MATCH_START_POLL_SECONDS[] = { 60, 150, 300 };
+
+// How long a rating worked out from the popup may hold out against the API.
+// Past this the API is trusted even if it still reports the old number, so a
+// misread popup can never pin a wrong rating on screen for good.
+constexpr qint64 PENDING_RATING_LIMIT_MS = 10 * 60 * 1000;
 
 
 HotaMetaClient::HotaMetaClient(QObject *parent):
@@ -46,6 +57,9 @@ void HotaMetaClient::clear()
 {
     this->fetched = hotaMetaStruct();
     ++this->generation;
+    // The opponent's pending result belongs to that opponent only. The local
+    // one is kept: setPlayers carries it over to the next pair.
+    this->pendingOpponent.active = false;
     this->local.clear();
     this->opponent.clear();
 }
@@ -57,17 +71,17 @@ bool HotaMetaClient::belongsToLocal(const QString &name) const
     return name.compare(this->local, Qt::CaseInsensitive) == 0;
 }
 
-void HotaMetaClient::setPlayers(const QString &localName, const QString &opponentName)
+bool HotaMetaClient::setPlayers(const QString &localName, const QString &opponentName)
 {
     if(localName.isEmpty() || opponentName.isEmpty())
     {
-        return;
+        return false;
     }
     // Called from the update that runs ten times a second, so anything already
     // fetched must not be fetched again.
     if(localName == this->local && opponentName == this->opponent)
     {
-        return;
+        return false;
     }
 
     clear();
@@ -81,6 +95,7 @@ void HotaMetaClient::setPlayers(const QString &localName, const QString &opponen
         this->fetched.localRating = QString::number(this->pendingLocal.expected);
     }
     refresh();
+    return true;
 }
 
 void HotaMetaClient::refresh()
@@ -112,20 +127,33 @@ void HotaMetaClient::refreshResults()
     fetchHeadToHead(this->local, this->opponent);
 }
 
-void HotaMetaClient::refreshAfterMatch(const QString &localRatingDelta)
+void HotaMetaClient::refreshAfterMatch(const QString &localRatingDelta,
+                                       const QString &localGameRating)
 {
     bool deltaParsed = false;
-    bool ratingParsed = false;
     const int delta = localRatingDelta.toInt(&deltaParsed);
-    const int before = this->fetched.localRating.toInt(&ratingParsed);
-    // A change of zero cannot be told apart from an API that has not caught
-    // up, so it is left to the API like a missing one.
+
+    // The rating from before the game: the one the API gave for this match,
+    // or, if that request never answered, the one read from the game itself.
+    bool ratingParsed = false;
+    int before = this->fetched.localRating.toInt(&ratingParsed);
+    if(ratingParsed == false)
+    {
+        const int fromGame = localGameRating.toInt(&ratingParsed);
+        // The game reports 0 when it has no profile to read from.
+        ratingParsed = ratingParsed && fromGame > 0;
+        before = fromGame;
+    }
+
+    // A change of zero leaves nothing to work out, and could not be told
+    // apart from an API that has not caught up anyway.
     if(deltaParsed && ratingParsed && delta != 0 && this->local.isEmpty() == false)
     {
         this->pendingLocal.active = true;
         this->pendingLocal.player = this->local;
         this->pendingLocal.before = before;
         this->pendingLocal.expected = before + delta;
+        this->pendingLocal.since.start();
         this->fetched.localRating = QString::number(this->pendingLocal.expected);
         qInfo() << "Local rating from the popup:" << before << "+" << delta
                 << "=" << this->pendingLocal.expected;
@@ -134,21 +162,92 @@ void HotaMetaClient::refreshAfterMatch(const QString &localRatingDelta)
     else
     {
         this->pendingLocal.active = false;
+        qInfo() << "Local rating left to the API. Popup change:" << localRatingDelta
+                << "API rating:" << this->fetched.localRating
+                << "game rating:" << localGameRating;
     }
 
-    refresh();
-    const unsigned int scheduledFor = this->generation;
-    for(const int seconds: AFTER_MATCH_REFRESH_SECONDS)
+    // The opponent's change is not on the popup, so all that can be done is
+    // to notice when the API moves away from the rating before the game.
+    bool opponentParsed = false;
+    const int opponentBefore = this->fetched.opponentRating.toInt(&opponentParsed);
+    this->pendingOpponent.active = opponentParsed && this->opponent.isEmpty() == false;
+    this->pendingOpponent.player = this->opponent;
+    this->pendingOpponent.before = opponentBefore;
+
+    refreshResults();
+    // With nothing to compare against there is no telling when the API has
+    // caught up, so poll the whole window rather than not at all.
+    pollResults(RESULT_POLL_SECONDS, RESULT_POLL_LIMIT_SECONDS, resultsSettled() == false);
+}
+
+void HotaMetaClient::matchStarted(bool alreadyFetched)
+{
+    // A rematch keeps the same pair, so setPlayers fetched nothing: re-read
+    // everything, the trade included, which is new for every match. This is
+    // also what catches a finished game whose popup was never seen.
+    if(alreadyFetched == false)
     {
-        QTimer::singleShot(seconds * 1000, this, [this, scheduledFor]()
+        refresh();
+    }
+
+    if(resultsSettled() == false)
+    {
+        // Still waiting for the API to show the last game.
+        pollResults(RESULT_POLL_SECONDS, RESULT_POLL_LIMIT_SECONDS, true);
+        return;
+    }
+
+    // The opponent may have come straight from another game.
+    const unsigned int series = ++this->pollSeries;
+    const unsigned int scheduledFor = this->generation;
+    for(const int seconds: MATCH_START_POLL_SECONDS)
+    {
+        QTimer::singleShot(seconds * 1000, this, [this, series, scheduledFor]()
         {
-            // A new pair of players has been fetched since, and their numbers
-            // are not the ones this game moved.
-            if(scheduledFor != this->generation)
+            if(series != this->pollSeries || scheduledFor != this->generation)
+            {
+                return;
+            }
+            fetchRating(this->local, true);
+            fetchRating(this->opponent, false);
+        });
+    }
+}
+
+bool HotaMetaClient::resultsSettled() const
+{
+    return this->pendingLocal.active == false && this->pendingOpponent.active == false;
+}
+
+void HotaMetaClient::pollResults(int intervalSeconds, int limitSeconds, bool stopWhenSettled)
+{
+    // Starting a new series cancels whatever was scheduled before it.
+    const unsigned int series = ++this->pollSeries;
+    const unsigned int scheduledFor = this->generation;
+    for(int seconds = intervalSeconds; seconds <= limitSeconds; seconds += intervalSeconds)
+    {
+        const bool last = seconds + intervalSeconds > limitSeconds;
+        QTimer::singleShot(seconds * 1000, this,
+                           [this, series, scheduledFor, last, limitSeconds, stopWhenSettled]()
+        {
+            // A new pair of players has been fetched since, or a newer series
+            // has taken over.
+            if(series != this->pollSeries || scheduledFor != this->generation)
+            {
+                return;
+            }
+            if(stopWhenSettled && resultsSettled())
             {
                 return;
             }
             refreshResults();
+            if(last && this->pendingOpponent.active)
+            {
+                qWarning() << "The API still shows the opponent's rating from"
+                           << "before the game after" << limitSeconds << "s.";
+                this->pendingOpponent.active = false;
+            }
         });
     }
 }
@@ -212,6 +311,12 @@ void HotaMetaClient::fetchRating(const QString &name, bool isLocal)
         {
             return;
         }
+        // The players may have changed while this was in flight.
+        const QString &current = isLocal ? this->local : this->opponent;
+        if(name.compare(current, Qt::CaseInsensitive) != 0)
+        {
+            return;
+        }
         const QString rating = QString::number(object.value("rating").toInt());
         // The same reply carries the thumbs up count the lobby shows beside
         // the rating, so it is taken here rather than asked for separately.
@@ -222,19 +327,32 @@ void HotaMetaClient::fetchRating(const QString &name, bool isLocal)
                 name.compare(this->pendingLocal.player, Qt::CaseInsensitive) == 0)
         {
             const int reported = rating.toInt();
-            if(reported == this->pendingLocal.before)
+            if(reported == this->pendingLocal.before &&
+                    this->pendingLocal.since.elapsed() < PENDING_RATING_LIMIT_MS)
             {
                 // Still the rating from before the game: keep the one worked
                 // out from the popup until the API has the result.
                 return;
             }
-            if(reported != this->pendingLocal.expected)
+            if(reported == this->pendingLocal.before)
+            {
+                qWarning() << "The API still reports" << reported
+                           << "long after the game, dropping the popup rating"
+                           << this->pendingLocal.expected;
+            }
+            else if(reported != this->pendingLocal.expected)
             {
                 qWarning() << "The API rating" << reported
                            << "differs from the one worked out from the popup"
                            << this->pendingLocal.expected << "- using the API.";
             }
             this->pendingLocal.active = false;
+        }
+        if(isLocal == false && this->pendingOpponent.active &&
+                name.compare(this->pendingOpponent.player, Qt::CaseInsensitive) == 0 &&
+                rating.toInt() != this->pendingOpponent.before)
+        {
+            this->pendingOpponent.active = false;
         }
         if(isLocal)
         {

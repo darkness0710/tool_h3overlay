@@ -123,6 +123,9 @@ struct PlayerStruct
     std::array <char, 20> winningColor;
     bool newMatchToRegister;
     bool displayTavernHero;
+    /** Counts matches entered since the overlay started, so the controller
+     *  can tell a rematch against the same opponent from the match before. */
+    uint32_t matchSerial;
 };
 
 typedef struct
@@ -226,6 +229,8 @@ struct displayInfoStruct
     QString ratingDelta;
     QString mapName;
     bool newMatchToRegister;
+    /** Changes every time a new match is entered. */
+    uint32_t matchSerial = 0;
 };
 
 

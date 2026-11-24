@@ -294,15 +294,32 @@ void MainWindow::getUpdate(const displayInfoStruct &automaticData)
     // two always agree on who is who.
     const size_t localIndex = this->autoData.player[Right].isLocalPlayer ? Right : Left;
     const size_t remoteIndex = (localIndex == Left) ? Right : Left;
-    this->hotaMeta->setPlayers(this->autoData.player[localIndex].name,
-                               this->autoData.player[remoteIndex].name);
+    const bool fetchedNewPair =
+            this->hotaMeta->setPlayers(this->autoData.player[localIndex].name,
+                                       this->autoData.player[remoteIndex].name);
 
     // A finished match moves every online value: both ratings, the head to head
     // score and today's record. Re-read them all rather than leave the overlay
     // showing the numbers from before the game.
     if(matchJustFinished)
     {
-        this->hotaMeta->refreshAfterMatch(this->autoData.ratingDelta);
+        this->hotaMeta->refreshAfterMatch(this->autoData.ratingDelta,
+                                          this->autoData.player[localIndex].rating);
+    }
+    else if(this->autoData.matchSerial != this->lastMatchSerial &&
+            this->autoData.player[localIndex].name.isEmpty() == false &&
+            this->autoData.player[remoteIndex].name.isEmpty() == false)
+    {
+        // A new match, which may be a rematch the client would otherwise not
+        // re-read anything for. Also covers a game whose popup was missed.
+        // Only taken once both names are known, so it is not spent on an
+        // update from before the players were read.
+        this->hotaMeta->matchStarted(fetchedNewPair);
+        this->lastMatchSerial = this->autoData.matchSerial;
+    }
+    if(matchJustFinished)
+    {
+        this->lastMatchSerial = this->autoData.matchSerial;
     }
 
     sendUpdate();

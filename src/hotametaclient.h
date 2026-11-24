@@ -5,6 +5,7 @@
 #include <QString>
 #include <QNetworkAccessManager>
 #include <QJsonObject>
+#include <QElapsedTimer>
 
 /**
  * @brief The hotaMetaStruct holds everything the overlay shows that comes from
@@ -51,8 +52,9 @@ public:
      * safe to call on every update from the game.
      * @param localName The name of the player running this overlay.
      * @param opponentName The name of the other player.
+     * @return true if this was a new pair and everything was fetched for it.
      */
-    void setPlayers(const QString &localName, const QString &opponentName);
+    bool setPlayers(const QString &localName, const QString &opponentName);
 
     /**
      * @brief refresh Re-reads everything for the current pair of players.
@@ -63,25 +65,38 @@ public:
     void refresh();
 
     /**
-     * @brief refreshAfterMatch Called when a match has just finished.
+     * @brief refreshAfterMatch Called when the WIN/LOSE popup of a ranked game
+     * has been seen.
      *
-     * The API only reflects a finished game within about two minutes of it
-     * ending, so asking once at the WIN/LOSE popup got the rating from before
-     * the game, which then stayed on screen for a whole rematch. Two things
-     * cover that gap:
+     * The API takes one to two and a half minutes to show a finished game.
+     * Until it does:
      *
-     * - The local player's new rating is worked out at once from the change
-     *   the popup shows, and kept until the API reports something other than
-     *   the rating from before the game. The API wins from then on, and a
-     *   difference between the two is logged.
-     * - The ratings, today's record and the head to head score are re-read a
-     *   few more times over the next minutes. The opponent's rating relies on
-     *   this alone, since the popup only shows the local player's change.
+     * - The local player's new rating is worked out from the change on the
+     *   popup and shown at once. It is held until the API reports something
+     *   other than the rating from before the game (or for ten minutes at
+     *   most); the API wins from then on and a difference is logged.
+     * - Both ratings, today's record and the head to head score are re-read
+     *   every 30 seconds for up to five minutes, stopping once both ratings
+     *   have moved. The opponent's rating relies on this alone, since the
+     *   popup only shows the local player's change.
      *
-     * @param localRatingDelta The change the popup shows, e.g. "-18". Empty or
-     * unparsable leaves the local rating to the API.
+     * @param localRatingDelta The change on the popup, e.g. "-18".
+     * @param localGameRating The local rating read from the game, used as the
+     * rating before the game if the API never answered for this match.
      */
-    void refreshAfterMatch(const QString &localRatingDelta);
+    void refreshAfterMatch(const QString &localRatingDelta, const QString &localGameRating);
+
+    /**
+     * @brief matchStarted Called when a new match begins.
+     *
+     * Re-reads everything for a rematch, which setPlayers ignores because the
+     * pair is unchanged. This is what puts the right numbers up even when the
+     * popup of the last game was never seen. If the last game's result is
+     * still pending the polling goes on; otherwise the ratings are re-read a
+     * few times in case the opponent came straight from another game.
+     * @param alreadyFetched true if setPlayers just fetched this pair.
+     */
+    void matchStarted(bool alreadyFetched);
 
     /**
      * @brief clear Forgets the current players and their statistics, so the
@@ -128,6 +143,14 @@ private:
      *  belongs to the next match and has its own retries. */
     void refreshResults();
 
+    /** Re-reads the results every intervalSeconds for limitSeconds, stopping
+     *  early once both ratings have moved if stopWhenSettled is set. Replaces
+     *  any earlier series. */
+    void pollResults(int intervalSeconds, int limitSeconds, bool stopWhenSettled);
+
+    /** Nothing is waiting for the API to catch up with a finished game. */
+    bool resultsSettled() const;
+
     /**
      * @brief fetchTrade Reads the agreed gold trade for the running match from
      * the live lobby. The lobby only publishes the picks a little while after
@@ -154,7 +177,21 @@ private:
         QString player;
         int before = 0;
         int expected = 0;
+        QElapsedTimer since;
     } pendingLocal;
+
+    /** The opponent's rating from before a finished game, so polling can stop
+     *  once the API has moved away from it. */
+    struct PendingOpponent
+    {
+        bool active = false;
+        QString player;
+        int before = 0;
+    } pendingOpponent;
+
+    /** Bumped by every new polling series, so the timers of an older series
+     *  can tell they have been replaced. */
+    unsigned int pollSeries = 0;
 };
 
 #endif // HOTAMETACLIENT_H
